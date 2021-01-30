@@ -1,10 +1,11 @@
-<UXML xmlns="UnityEngine.UIElements">
-    <Template path="Assets/Editor/Resources/ButtonTemplate.uxml" name="button-template"/>
-    <VisualElement class="buttons-container">
-        <Instance template="button-template" name="Cube"/>
-        <Instance template="button-template" name="Sphere"/>
-        <Instance template="button-template" name="Capsule"/>
-        <Instance template="button-template" name="Cylinder"/>
-        <Instance template="button-template" name="Plane"/>
-    </VisualElement>
-</UXML>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xmlns="UnityEngine.UIElements" editor-extension-mode="True">
+    <ui:Template name="button-template" src="ButtonTemplate.uxml" />
+    <Style src="QuickTool_Style.uss" />
+    <ui:VisualElement class="buttons-container">
+        <ui:Instance template="button-template" name="Cube" style="background-image: none;" />
+        <ui:Instance template="button-template" name="Sphere" />
+        <ui:Instance template="button-template" name="Capsule" />
+        <ui:Instance template="button-template" name="Cylinder" />
+        <ui:Instance template="button-template" name="Plane" />
+    </ui:VisualElement>
+</ui:UXML>

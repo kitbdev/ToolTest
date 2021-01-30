@@ -1,0 +1,20 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="True">
+    <ui:Toggle label="use radial" />
+    <ui:VisualElement>
+        <uie:FloatField label="radial size" value="42.2" style="width: 340.4px;" />
+        <uie:FloatField label="angular size" value="42.2" />
+    </ui:VisualElement>
+    <ui:VisualElement>
+        <uie:FloatField label="Grid size" value="42.2" />
+    </ui:VisualElement>
+    <ui:VisualElement style="align-items: center; justify-content: flex-start; flex-direction: row;">
+        <ui:Label text="Enabled Axis" display-tooltip-when-elided="true" style="width: 137px;" />
+        <ui:Button text="y" display-tooltip-when-elided="true" />
+        <ui:Button text="x" display-tooltip-when-elided="true" />
+    </ui:VisualElement>
+    <ui:VisualElement style="height: 96px; bottom: auto; position: relative;">
+        <ui:Button text="Snap" display-tooltip-when-elided="true" focusable="false" style="height: 26px; flex-direction: column; position: relative; bottom: 0; width: 341px; opacity: 1; display: flex;">
+            <ui:Button text="z" display-tooltip-when-elided="true" />
+        </ui:Button>
+    </ui:VisualElement>
+</ui:UXML>
