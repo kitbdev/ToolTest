@@ -13,3 +13,8 @@ grid snap window
 		world origin is fine
 		angular size
 		and radial size
+	grid settings persist between unity sessions
+		close and reopen should keep the same
+	local grids
+		position and rotation set
+
