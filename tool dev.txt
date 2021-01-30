@@ -1,0 +1,15 @@
+tool dev
+
+
+assignments
+grid snap window
+	variable size/scale
+	snap selected objects to grid
+		on button press
+	show grid
+		just around object?
+		show where object will move to
+	polar grid support
+		world origin is fine
+		angular size
+		and radial size
