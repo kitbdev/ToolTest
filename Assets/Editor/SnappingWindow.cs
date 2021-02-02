@@ -143,14 +143,38 @@ public class SnappingWindow : EditorWindow
         snapped.z = Mathf.Round(a.z / snapSize) * snapSize;
         return snapped;
     }
+    Vector3 polarToVec3(float angle, float radius = 1)
+    {
+        return new Vector3(Mathf.Cos(angle * Mathf.Deg2Rad), 0, Mathf.Sin(angle * Mathf.Deg2Rad)) * radius;
+    }
+    void Vec3ToPolar(Vector3 a, out float radius, out float angle)
+    {
+        Vector3 b = a;
+        b.Normalize();
+        angle = Mathf.Atan2(b.z, b.x) * Mathf.Rad2Deg;
+        radius = new Vector2(a.x, a.z).magnitude;
+    }
+    void GetPolarSnapped(Vector3 a, out float radius, out float angle)
+    {
+        Vector3 b = a;
+        b.Normalize();
+        float ang = Mathf.Atan2(b.z, b.x) * Mathf.Rad2Deg;
+        float snapAng = Mathf.Round(ang / gridAngularSize) * gridAngularSize;
+        float magn = new Vector2(a.x, a.z).magnitude;
+        float snappedMag = Mathf.Round(magn / gridRadialSize) * gridRadialSize;
+        angle = snapAng;
+        radius = snappedMag;
+    }
     Vector3 SnapAxisPolar(Vector3 a)
     {
         Vector3 snapped = a;
-        float angularSize = angularSizeField.value;
-        float radialSize = radialSizeField.value;
-        // snapped.x = Mathf.Round(a.x / angularSize) * angularSize;
-        // snapped.y = Mathf.Round(a.y / angularSize) * angularSize;
-        // snapped.z = Mathf.Round(a.z / angularSize) * angularSize;
+        snapped.y = a.y;
+
+        GetPolarSnapped(a, out var snapRadius, out var snapAngle);
+        float angX = snapRadius * Mathf.Cos(snapAngle * Mathf.Deg2Rad);
+        float angY = snapRadius * Mathf.Sin(snapAngle * Mathf.Deg2Rad);
+        snapped.x = angX;
+        snapped.z = angY;
         return snapped;
     }
 
@@ -208,13 +232,66 @@ public class SnappingWindow : EditorWindow
         } else
         {
             // use polar coordinates
-
+            // todo support any plane, not just xz
+            // todo support any transform as polar center, not just the origin
+            // todo snap in scene view while holding ctrl?
+            // todo snap rotation as well?
+            if (radialSizeField.value <= 0)
+            {
+                return;
+            }
             var selectedTransforms = Selection.transforms;
-            int numLines = 4;
+            int numLines = 3;
+            float distBetweenLines = gridRadialSize;//(rangeDist) / numLines * 2;
+            float rangeDist = distBetweenLines * (numLines - 1);
             bool showYAxis = false;
+            Vector3 polarCenter = Vector3.zero;
             foreach (var st in selectedTransforms)
             {
+                polarCenter.y = st.position.y;
+                Vector3 center = SnapAxisPolar(st.position);
+                center.y = polarCenter.y;
+                Handles.DrawLine(center, st.position);
+                Handles.DrawSolidDisc(center, Vector3.up, gridRadialSize * 0.05f);
+                Vec3ToPolar(center, out var crad, out var cang);
+                for (int i = 0; i < numLines; i++)
+                {
+                    float lineOffMult = i - numLines / 2;
+                    if (center == Vector3.zero && i == 0)
+                    {
+                        continue;
+                    }
+                    float angOffset = lineOffMult * gridAngularSize;
+                    GetPolarSnapped(st.position, out float snapRad, out float snapAng);
 
+                    var lineCenter = SnapAxisPolar(polarToVec3(cang + angOffset, crad));
+                    lineCenter.y = polarCenter.y;
+                    var toCenter = lineCenter - polarCenter;
+                    if (toCenter != Vector3.zero)
+                    {
+                        var toDir = toCenter.normalized;
+                        Handles.DrawLine(lineCenter - toDir * rangeDist, lineCenter + toDir * rangeDist);
+                    } else
+                    {
+                        lineCenter = SnapAxisPolar(polarToVec3(snapAng + angOffset, snapRad + gridRadialSize));
+                        lineCenter.y = polarCenter.y;
+                        toCenter = lineCenter - polarCenter;
+                        if (toCenter != Vector3.zero)
+                        {
+                            var toDir = toCenter.normalized;
+                            float nDist = gridRadialSize / 2;
+                            Handles.DrawLine(lineCenter - toDir * (rangeDist + nDist), lineCenter + toDir * nDist);
+                        }
+                    }
+
+                    float radOffset = lineOffMult * gridRadialSize;
+                    float angDist = gridAngularSize * 2;
+                    float startAng = (snapAng - angDist);
+                    // Debug.Log(snapAng);
+                    Vector3 startAnglePos = polarToVec3(startAng);
+
+                    Handles.DrawWireArc(polarCenter, Vector3.up, startAnglePos, -angDist * 2, snapRad + radOffset);
+                }
             }
         }
     }
