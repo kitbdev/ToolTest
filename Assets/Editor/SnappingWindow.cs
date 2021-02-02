@@ -33,6 +33,8 @@ public class SnappingWindow : EditorWindow
 
     private void OnEnable()
     {
+        Load();
+
         var root = rootVisualElement;
         snapWindowSO = new SerializedObject(this);
         var gridSizeProperty = snapWindowSO.FindProperty("gridcSize");
@@ -81,11 +83,26 @@ public class SnappingWindow : EditorWindow
     }
     private void OnDisable()
     {
+        Save();
         // lastGridRadialSize = gridSizeField.value;
 
         // gridSizeField.UnregisterValueChangedCallback();
         Selection.selectionChanged -= SelectionChanged;
         SceneView.duringSceneGui -= SceneGUI;
+    }
+    void Save()
+    {
+        EditorPrefs.SetFloat("SNAPTOOL_gridcSize", gridcSize);
+        EditorPrefs.SetFloat("SNAPTOOL_gridAngularSize", gridAngularSize);
+        EditorPrefs.SetFloat("SNAPTOOL_gridRadialSize", gridRadialSize);
+        EditorPrefs.SetBool("SNAPTOOL_usePolar", usePolar);
+    }
+    void Load()
+    {
+        gridcSize = EditorPrefs.GetFloat("SNAPTOOL_gridcSize", gridcSize);
+        gridAngularSize = EditorPrefs.GetFloat("SNAPTOOL_gridAngularSize", gridAngularSize);
+        gridRadialSize = EditorPrefs.GetFloat("SNAPTOOL_gridRadialSize", gridRadialSize);
+        usePolar = EditorPrefs.GetBool("SNAPTOOL_usePolar", usePolar);
     }
     void PolarChange(bool enabled)
     {
@@ -180,6 +197,9 @@ public class SnappingWindow : EditorWindow
 
     void SceneGUI(SceneView sceneView)
     {
+        if (Event.current.type != EventType.Repaint)
+            return;
+
         if (!usePolar)
         {
             if (gridSizeField.value <= 0)
