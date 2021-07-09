@@ -26,5 +26,7 @@ prop cannon
 	draw prefabs before instantiating (instead of dots)
 	from me
 		toggle on off prop place mode
+		make into a tool - like terrain brushes do
 		mouse button
+		save and load settings
 

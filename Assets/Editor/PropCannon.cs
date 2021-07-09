@@ -5,6 +5,8 @@ using UnityEditor.UIElements;
 
 public class PropCannon : EditorWindow
 {
+    private const string startToggleText = "start placing props";
+    private const string finishToggleText = "finish placing props";
 
     [Min(0)]
     public float brushRadius = 10;
@@ -13,9 +15,15 @@ public class PropCannon : EditorWindow
     public LayerMask layerMask = Physics.DefaultRaycastLayers;
     // public int spawnAmountMax = 8;
 
-    Label numPointsLabel;
-
+    bool isPlacing = false;
+    float upDist = 5f;
+    float downDist = 5f;
     Vector2[] randPoints;
+    float[] randRots;
+    Matrix4x4[] placedTransforms;
+
+
+    Label numPointsLabel;
 
     SerializedObject serializedObject;
 
@@ -49,11 +57,11 @@ public class PropCannon : EditorWindow
         root.Add(minSpawnField);
         var maxSpawnField = new IntegerField(nameof(spawnAmountMax));
         maxSpawnField.bindingPath = nameof(spawnAmountMax);
-        maxSpawnField.RegisterValueChangedCallback(f => SceneView.RepaintAll());
+        maxSpawnField.RegisterValueChangedCallback(f => { SceneView.RepaintAll(); GenerateRandomPoints(); });
         root.Add(maxSpawnField);
         var layerMaskField = new LayerMaskField(nameof(layerMask));
         layerMaskField.bindingPath = nameof(layerMask);
-        layerMaskField.RegisterValueChangedCallback(f => SceneView.RepaintAll());
+        layerMaskField.RegisterValueChangedCallback(f => { SceneView.RepaintAll(); GenerateRandomPoints(); });
         root.Add(layerMaskField);
 
         numPointsLabel = new Label("num points: 0");
@@ -68,6 +76,14 @@ public class PropCannon : EditorWindow
         btn.text = "save test";
         btn.clicked += () => { SaveEditorData(); };
         root.Add(btn);
+        var toggleBtn = new Button();
+        toggleBtn.text = isPlacing ? finishToggleText : startToggleText;
+        toggleBtn.clicked += () => {
+            isPlacing = !isPlacing;
+            toggleBtn.text = isPlacing ? finishToggleText : startToggleText;
+        };
+        root.Add(toggleBtn);
+
 
         serializedObject = new SerializedObject(this);
         root.Bind(serializedObject);
@@ -109,8 +125,20 @@ public class PropCannon : EditorWindow
         {
             sceneView.Repaint();
         }
+        if (!isPlacing)
+        {
+            return;
+        }
+        if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
+        {
+            if (SpawnProps())
+            {
+                Event.current.Use();
+            }
+        }
         if (Event.current.type == EventType.ScrollWheel && Event.current.control)
         {
+            // change brush size with scroll wheel
             serializedObject.Update();
             var brprop = serializedObject.FindProperty(nameof(brushRadius));
 
@@ -157,11 +185,36 @@ public class PropCannon : EditorWindow
                 Handles.DrawAAPolyLine(4, hit.point, hit.point + hitBitangent);
 
                 // draw circle
-                Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
+                // Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
                 Handles.color = Color.black;
-                Handles.DrawWireDisc(hit.point, hit.normal, brushRadius);
-                Handles.color = Color.white;
-                Handles.zTest = UnityEngine.Rendering.CompareFunction.LessEqual;
+                // Handles.DrawWireDisc(hit.point, hit.normal, brushRadius);
+                // Handles.color = Color.white;
+                // Handles.zTest = UnityEngine.Rendering.CompareFunction.LessEqual;
+                const int circleDetail = 64;
+                Vector3[] circlePoints = new Vector3[circleDetail];
+                for (int i = 0; i < circleDetail; i++)
+                {
+                    float ang = (float)i / ((float)circleDetail - 1f) * Mathf.PI * 2;
+                    Vector2 circumference = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+                    Vector3 tangetPos = hit.point + (hitTangent * circumference.x + hitBitangent * circumference.y) * brushRadius;
+                    Vector3 point = tangetPos + hitNormal * upDist;
+                    Ray ray = new Ray(point, -hitNormal);
+                    if (Physics.Raycast(ray, out var cirHit, upDist + downDist, layerMask))
+                    {
+                        circlePoints[i] = cirHit.point + cirHit.normal * 0.02f;
+                    } else
+                    {
+                        circlePoints[i] = tangetPos;
+                    }
+                }
+                Handles.DrawAAPolyLine(2, circlePoints);
+            } else
+            {
+                // mouse not over surface
+                if (placedTransforms.Length != 0)
+                {
+                    placedTransforms = new Matrix4x4[0];
+                }
             }
         }
     }
@@ -170,13 +223,17 @@ public class PropCannon : EditorWindow
         int numPoints = Random.Range(spawnAmountMin, spawnAmountMax);
         // random positions in brush
         randPoints = new Vector2[numPoints];
+        randRots = new float[numPoints];
         for (int i = 0; i < numPoints; i++)
         {
             randPoints[i] = Random.insideUnitCircle;
+            randRots[i] = Random.Range(0, 360);
         }
         numPointsLabel.text = " num points: " + randPoints.Length;
         SceneView.RepaintAll();
+        Repaint();
     }
+
     Vector3[] SnapPointsToTerrain(Vector3 point, Vector3 normal, Vector3 xaxis, Vector3 yaxis)
     {
         if (randPoints.Length == 0)
@@ -185,9 +242,8 @@ public class PropCannon : EditorWindow
         }
         int numPoints = randPoints.Length;
         Vector3[] positions = new Vector3[numPoints];
+        placedTransforms = new Matrix4x4[numPoints];
         // snap to terrain
-        float upDist = 5f;
-        float downDist = 5f;
         for (int i = 0; i < numPoints; i++)
         {
             Vector3 tangetPos = point + (xaxis * randPoints[i].x + yaxis * randPoints[i].y) * brushRadius;
@@ -197,14 +253,51 @@ public class PropCannon : EditorWindow
                 // Handles.color = Color.red;
                 positions[i] = hit.point;
                 // Handles.DrawAAPolyLine(4, startPos, hit.point);
+                // random rotation
+                Quaternion rot = Quaternion.LookRotation(yaxis, hit.normal).normalized;
+                rot *= Quaternion.Euler(randRots[i] * Vector3.up).normalized;
+                placedTransforms[i] = Matrix4x4.TRS(positions[i], rot, Vector3.one);
             } else
             {
                 // Handles.color = Color.white;
                 // positions[i] = tangetPos;
                 positions[i] = Vector3.negativeInfinity;
                 // Handles.DrawAAPolyLine(4, startPos, startPos -normal * (upDist + downDist));
+                placedTransforms[i] = Matrix4x4.zero;
             }
         }
         return positions;
+    }
+    bool PreviewSpawnProps()
+    {
+        return true;
+    }
+    // returns false if points are all invalid
+    bool SpawnProps()
+    {
+        if (placedTransforms.Length == 0)
+        {
+            return false;
+        }
+        foreach (var placedTransform in placedTransforms)
+        {
+            if (placedTransform.ValidTRS() && placedTransform != Matrix4x4.zero)
+            {
+                GameObject gameObject = ObjectFactory.CreatePrimitive(PrimitiveType.Cube);
+                // GameObject gameObject = ObjectFactory.CreateGameObject("prop");
+
+                gameObject.transform.localScale = Vector3.Scale(placedTransform.lossyScale, new Vector3(1, 2, 1));
+                gameObject.transform.rotation = placedTransform.rotation;
+                gameObject.transform.position = placedTransform.GetColumn(3);
+                gameObject.transform.position += Vector3.up * 0.9f;
+                if (Selection.activeGameObject)
+                {
+                    // gameObject.transform.SetParent(Selection.activeGameObject.transform);
+                    // problem when undoing?
+                }
+            }
+        }
+        GenerateRandomPoints();
+        return true;
     }
 }
