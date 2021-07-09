@@ -18,3 +18,13 @@ grid snap window
 	local grids
 		position and rotation set
 
+prop cannon
+	actually spawn prefabs
+		undoable
+		follows normal
+	random rotation around vertical
+	draw prefabs before instantiating (instead of dots)
+	from me
+		toggle on off prop place mode
+		mouse button
+

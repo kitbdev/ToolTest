@@ -6,9 +6,18 @@ using UnityEditor.UIElements;
 public class PropCannon : EditorWindow
 {
 
+    [Min(0)]
     public float brushRadius = 10;
     public int spawnAmountMin = 5;
+    public int spawnAmountMax = 30;
+    public LayerMask layerMask = Physics.DefaultRaycastLayers;
     // public int spawnAmountMax = 8;
+
+    Label numPointsLabel;
+
+    Vector2[] randPoints;
+
+    SerializedObject serializedObject;
 
     [MenuItem("ToolTest/PropCannon")]
     private static void ShowWindow()
@@ -20,23 +29,51 @@ public class PropCannon : EditorWindow
     {
         LoadEditorData();
 
-        // editor window 
+        // editor window ui
         var root = rootVisualElement;
 
         var radField = new FloatField("Brush Radius");
-        radField.bindingPath = "brushRadius";
-        radField.RegisterValueChangedCallback(f => SceneView.RepaintAll());
+        radField.bindingPath = nameof(brushRadius);
+        radField.RegisterValueChangedCallback(f => {
+            // brushRadius = 0;// Mathf.Max(f.newValue, 0.01f);
+            // var brprop = serializedObject.FindProperty(nameof(brushRadius));
+            // brprop.floatValue = Mathf.Max(0.01f, brprop.floatValue);
+            // serializedObject.ApplyModifiedProperties();
+            SceneView.RepaintAll();
+        });
         root.Add(radField);
-        var minSpawnField = new FloatField("spawnAmountMin");
-        minSpawnField.bindingPath = "spawnAmountMin";
+        // root.Add(new InspectorElement());
+        var minSpawnField = new IntegerField(nameof(spawnAmountMin));
+        minSpawnField.bindingPath = nameof(spawnAmountMin);
         minSpawnField.RegisterValueChangedCallback(f => SceneView.RepaintAll());
         root.Add(minSpawnField);
+        var maxSpawnField = new IntegerField(nameof(spawnAmountMax));
+        maxSpawnField.bindingPath = nameof(spawnAmountMax);
+        maxSpawnField.RegisterValueChangedCallback(f => SceneView.RepaintAll());
+        root.Add(maxSpawnField);
+        var layerMaskField = new LayerMaskField(nameof(layerMask));
+        layerMaskField.bindingPath = nameof(layerMask);
+        layerMaskField.RegisterValueChangedCallback(f => SceneView.RepaintAll());
+        root.Add(layerMaskField);
+
+        numPointsLabel = new Label("num points: 0");
+        root.Add(numPointsLabel);
+        // var numPointsLabelVal = new Label(randPoints.Length);
+        // root.Add(numPointsLabelVal);
+        var randbtn = new Button();
+        randbtn.text = "new random points";
+        randbtn.clicked += () => { GenerateRandomPoints(); };
+        root.Add(randbtn);
+        var btn = new Button();
+        btn.text = "save test";
+        btn.clicked += () => { SaveEditorData(); };
+        root.Add(btn);
+
+        serializedObject = new SerializedObject(this);
+        root.Bind(serializedObject);
 
 
-
-
-        var so = new SerializedObject(this);
-        root.Bind(so);
+        GenerateRandomPoints();
 
         // events
         SceneView.duringSceneGui += SceneGUI;
@@ -49,6 +86,17 @@ public class PropCannon : EditorWindow
     }
     void SaveEditorData()
     {
+        var me = this;
+        // var me = new SerializedObject(this).targetObject;
+
+        // string v = JsonUtility.ToJson(me);
+        // string key = GetType().Name.ToUpper();
+        // Debug.Log(key+" "+v);
+        // PropCannon objectToOverwrite = ScriptableObject.CreateInstance<PropCannon>();
+        // JsonUtility.FromJsonOverwrite(v, objectToOverwrite);
+        // Debug.Log(JsonUtility.ToJson(objectToOverwrite));
+        // still need to set individually
+
 
     }
     void LoadEditorData()
@@ -57,36 +105,106 @@ public class PropCannon : EditorWindow
     }
     void SceneGUI(SceneView sceneView)
     {
+        if (Event.current.type == EventType.MouseMove)
+        {
+            sceneView.Repaint();
+        }
+        if (Event.current.type == EventType.ScrollWheel && Event.current.control)
+        {
+            serializedObject.Update();
+            var brprop = serializedObject.FindProperty(nameof(brushRadius));
+
+            float scrollAmount = Event.current.delta.y;
+            scrollAmount = -Mathf.Sign(scrollAmount);
+            brprop.floatValue *= 1 + scrollAmount * 0.2f;
+            brprop.floatValue = Mathf.Max(0.01f, brprop.floatValue);
+            serializedObject.ApplyModifiedProperties();
+
+            Repaint();
+            sceneView.Repaint();
+            Event.current.Use();
+        }
         if (Event.current.type == EventType.Repaint)
         {
             Handles.zTest = UnityEngine.Rendering.CompareFunction.LessEqual;
             Transform cam = sceneView.camera.transform;
+            Ray mouseRay = HandleUtility.GUIPointToWorldRay(Event.current.mousePosition);
 
             Ray camRay = new Ray(cam.position, cam.forward);
             // Ray camRay = sceneView.camera.ScreenPointToRay(Event.current.mousePosition);
-            Handles.color = Color.black;
-            if (Physics.Raycast(camRay, out var hit))
+            if (Physics.Raycast(mouseRay, out var hit, 1000, layerMask))
             {
+                Vector3 hitNormal = hit.normal;
+                Vector3 hitTangent = Vector3.Cross(hitNormal, cam.up).normalized;
+                Vector3 hitBitangent = -Vector3.Cross(hit.normal, hitTangent);
+
+                // calculate and draw points
+                Vector3[] points = SnapPointsToTerrain(hit.point, hitNormal, hitTangent, hitBitangent);
+                Handles.color = Color.black;
+                foreach (var point in points)
+                {
+                    if (point != Vector3.negativeInfinity)
+                        Handles.SphereHandleCap(-1, point, Quaternion.identity, 0.2f, EventType.Repaint);
+                    // Handles.DrawAAPolyLine(4, point, point + hitNormal);
+                }
+
+                // draw tangent space axis
+                Handles.color = Color.red;
+                Handles.DrawAAPolyLine(4, hit.point, hit.point + hitTangent);
+                Handles.color = Color.green;
                 Handles.DrawAAPolyLine(4, hit.point, hit.point + hit.normal);
+                Handles.color = Color.blue;
+                Handles.DrawAAPolyLine(4, hit.point, hit.point + hitBitangent);
+
+                // draw circle
+                Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
+                Handles.color = Color.black;
                 Handles.DrawWireDisc(hit.point, hit.normal, brushRadius);
+                Handles.color = Color.white;
+                Handles.zTest = UnityEngine.Rendering.CompareFunction.LessEqual;
             }
-            Handles.color = Color.white;
         }
     }
     void GenerateRandomPoints()
     {
-        int numPoints = spawnAmountMin;
+        int numPoints = Random.Range(spawnAmountMin, spawnAmountMax);
         // random positions in brush
+        randPoints = new Vector2[numPoints];
+        for (int i = 0; i < numPoints; i++)
+        {
+            randPoints[i] = Random.insideUnitCircle;
+        }
+        numPointsLabel.text = " num points: " + randPoints.Length;
+        SceneView.RepaintAll();
+    }
+    Vector3[] SnapPointsToTerrain(Vector3 point, Vector3 normal, Vector3 xaxis, Vector3 yaxis)
+    {
+        if (randPoints.Length == 0)
+        {
+            GenerateRandomPoints();
+        }
+        int numPoints = randPoints.Length;
         Vector3[] positions = new Vector3[numPoints];
-        for (int i = 0; i < numPoints; i++)
-        {
-            positions[i] = Random.insideUnitCircle * brushRadius;
-        }
         // snap to terrain
+        float upDist = 5f;
+        float downDist = 5f;
         for (int i = 0; i < numPoints; i++)
         {
-            var start = positions[i];
-            // if (Physics.Raycast(start, start))
+            Vector3 tangetPos = point + (xaxis * randPoints[i].x + yaxis * randPoints[i].y) * brushRadius;
+            var startPos = tangetPos + normal * upDist;
+            if (Physics.Raycast(startPos, -normal, out var hit, upDist + downDist, layerMask))
+            {
+                // Handles.color = Color.red;
+                positions[i] = hit.point;
+                // Handles.DrawAAPolyLine(4, startPos, hit.point);
+            } else
+            {
+                // Handles.color = Color.white;
+                // positions[i] = tangetPos;
+                positions[i] = Vector3.negativeInfinity;
+                // Handles.DrawAAPolyLine(4, startPos, startPos -normal * (upDist + downDist));
+            }
         }
+        return positions;
     }
 }
