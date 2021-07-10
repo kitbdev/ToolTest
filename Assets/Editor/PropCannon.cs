@@ -13,6 +13,7 @@ public class PropCannon : EditorWindow
     public int spawnAmountMin = 5;
     public int spawnAmountMax = 30;
     public LayerMask layerMask = Physics.DefaultRaycastLayers;
+    public GameObject spawnPrefab;
     // public int spawnAmountMax = 8;
 
     bool isPlacing = false;
@@ -22,6 +23,7 @@ public class PropCannon : EditorWindow
     float[] randRots;
     Matrix4x4[] placedTransforms;
 
+    Material previewmaterial;
 
     Label numPointsLabel;
 
@@ -37,6 +39,8 @@ public class PropCannon : EditorWindow
     {
         LoadEditorData();
 
+        previewmaterial = Resources.Load<Material>("previewmat");
+
         // editor window ui
         var root = rootVisualElement;
 
@@ -50,7 +54,10 @@ public class PropCannon : EditorWindow
             SceneView.RepaintAll();
         });
         root.Add(radField);
-        // root.Add(new InspectorElement());
+        // InspectorElement inspector = new InspectorElement();
+        // inspector.Add(new Label("hi"));
+        // ((BaseField<IntegerField>)inspector.ElementAt(0)).RegisterValueChangedCallback(f => SceneView.RepaintAll());
+        // root.Add(inspector);
         var minSpawnField = new IntegerField(nameof(spawnAmountMin));
         minSpawnField.bindingPath = nameof(spawnAmountMin);
         minSpawnField.RegisterValueChangedCallback(f => SceneView.RepaintAll());
@@ -63,6 +70,12 @@ public class PropCannon : EditorWindow
         layerMaskField.bindingPath = nameof(layerMask);
         layerMaskField.RegisterValueChangedCallback(f => { SceneView.RepaintAll(); GenerateRandomPoints(); });
         root.Add(layerMaskField);
+        var spawnPrefabField = new ObjectField(nameof(spawnPrefab));
+        spawnPrefabField.objectType = typeof(GameObject);
+        spawnPrefabField.allowSceneObjects = false;
+        spawnPrefabField.bindingPath = nameof(spawnPrefab);
+        spawnPrefabField.RegisterValueChangedCallback(f => { SceneView.RepaintAll(); GenerateRandomPoints(); });
+        root.Add(spawnPrefabField);
 
         numPointsLabel = new Label("num points: 0");
         root.Add(numPointsLabel);
@@ -129,6 +142,13 @@ public class PropCannon : EditorWindow
         {
             return;
         }
+        if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Space)
+        {
+            if (SpawnProps())
+            {
+                Event.current.Use();
+            }
+        }
         if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
         {
             if (SpawnProps())
@@ -168,12 +188,18 @@ public class PropCannon : EditorWindow
 
                 // calculate and draw points
                 Vector3[] points = SnapPointsToTerrain(hit.point, hitNormal, hitTangent, hitBitangent);
-                Handles.color = Color.black;
-                foreach (var point in points)
+                if (spawnPrefab)
                 {
-                    if (point != Vector3.negativeInfinity)
-                        Handles.SphereHandleCap(-1, point, Quaternion.identity, 0.2f, EventType.Repaint);
-                    // Handles.DrawAAPolyLine(4, point, point + hitNormal);
+                    PreviewSpawnProps();
+                } else
+                {
+                    Handles.color = Color.black;
+                    foreach (var point in points)
+                    {
+                        if (point != Vector3.negativeInfinity)
+                            Handles.SphereHandleCap(-1, point, Quaternion.identity, 0.2f, EventType.Repaint);
+                        // Handles.DrawAAPolyLine(4, point, point + hitNormal);
+                    }
                 }
 
                 // draw tangent space axis
@@ -270,12 +296,33 @@ public class PropCannon : EditorWindow
     }
     bool PreviewSpawnProps()
     {
+        if (placedTransforms.Length == 0 || spawnPrefab == null)
+        {
+            return false;
+        }
+        previewmaterial.SetPass(0);
+        foreach (var placedTransform in placedTransforms)
+        {
+            if (placedTransform.ValidTRS() && placedTransform != Matrix4x4.zero)
+            {
+                MeshFilter[] meshFilters = spawnPrefab.GetComponentsInChildren<MeshFilter>(true);
+                foreach (var mf in meshFilters)
+                {
+                    if (mf.sharedMesh != null)
+                    {
+                        var localM = placedTransform * mf.transform.localToWorldMatrix;
+                        Graphics.DrawMeshNow(mf.sharedMesh, localM);
+                        // Graphics.DrawMeshInstancedIndirect(mf.sharedMesh, placedTransform);
+                    }
+                }
+            }
+        }
         return true;
     }
     // returns false if points are all invalid
     bool SpawnProps()
     {
-        if (placedTransforms.Length == 0)
+        if (placedTransforms.Length == 0 || spawnPrefab == null)
         {
             return false;
         }
@@ -283,13 +330,14 @@ public class PropCannon : EditorWindow
         {
             if (placedTransform.ValidTRS() && placedTransform != Matrix4x4.zero)
             {
-                GameObject gameObject = ObjectFactory.CreatePrimitive(PrimitiveType.Cube);
-                // GameObject gameObject = ObjectFactory.CreateGameObject("prop");
+                // GameObject gameObject = ObjectFactory.CreatePrimitive(PrimitiveType.Cube);
+                GameObject gameObject = (GameObject)PrefabUtility.InstantiatePrefab(spawnPrefab);
+                Undo.RegisterCreatedObjectUndo(gameObject, "props spawned");
 
-                gameObject.transform.localScale = Vector3.Scale(placedTransform.lossyScale, new Vector3(1, 2, 1));
+                gameObject.transform.localScale = placedTransform.lossyScale;
                 gameObject.transform.rotation = placedTransform.rotation;
                 gameObject.transform.position = placedTransform.GetColumn(3);
-                gameObject.transform.position += Vector3.up * 0.9f;
+                // gameObject.transform.position += Vector3.up * 0.9f;
                 if (Selection.activeGameObject)
                 {
                     // gameObject.transform.SetParent(Selection.activeGameObject.transform);

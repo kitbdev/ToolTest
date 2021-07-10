@@ -264,7 +264,7 @@ public class SnappingWindow : EditorWindow
             int numLines = 3;
             float distBetweenLines = gridRadialSize;//(rangeDist) / numLines * 2;
             float rangeDist = distBetweenLines * (numLines - 1);
-            bool showYAxis = false;
+            // bool showYAxis = false;
             Vector3 polarCenter = Vector3.zero;
             foreach (var st in selectedTransforms)
             {
